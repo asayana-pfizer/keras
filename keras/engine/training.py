@@ -456,7 +456,7 @@ def generator_queue(generator, max_q_size=10,
 class Model(Container):
 
     def compile(self, optimizer, loss, metrics=[], loss_weights=None,
-                sample_weight_mode=None, **kwargs):
+                sample_weight_mode=None,add_trainable_weights=None,add_optimizer=None,**kwargs):
         '''Configures the model for training.
 
         # Arguments
@@ -485,7 +485,18 @@ class Model(Container):
         self.sample_weight_mode = sample_weight_mode
         self.loss = loss
         self.loss_weights = loss_weights
-
+        
+        #---------------
+        if not add_trainable_weights == None:
+            self.add_trainable_weights = add_trainable_weights
+            if not add_optimizer == None:
+                self.add_optimizer = optimizers.get(add_optimizer)
+            else:
+                self.add_optimizer = optimizers.get(optimizer)
+        else:
+            self.add_trainable_weights = None
+        #------------------------------------
+        
         # prepare loss weights
         if loss_weights is None:
             loss_weights_list = [1. for _ in range(len(self.outputs))]
@@ -691,10 +702,22 @@ class Model(Container):
             else:
                 inputs = self.inputs + self.targets + self.sample_weights
 
+            #----------------dcgan need
+            self._collected_trainable_weights = collect_trainable_weights(self)
+            #---------------------------------
             training_updates = self.optimizer.get_updates(self._collected_trainable_weights,
                                                           self.constraints,
                                                           self.total_loss)
-            updates = self.updates + training_updates
+            #-------------------------------
+            if not self.add_trainable_weights == None:
+                add_training_updates = self.add_optimizer.get_updates(self.add_trainable_weights,
+                                                              self.constraints,
+                                                              self.total_loss)
+                updates = self.updates + training_updates + add_training_updates
+            else:
+                updates = self.updates + training_updates
+            #-----------------------------------------------
+            #updates = self.updates + training_updates
 
             # returns loss and metrics. Updates weights at each call.
             self.train_function = K.function(inputs,
